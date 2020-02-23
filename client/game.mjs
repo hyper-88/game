@@ -3,9 +3,8 @@ const EARTH = '#';
 let map;
 let freeValueInShip;
 let step = 1; //шаг погрузки товара
-let restrict = 'none'; //ограничение направления движения в motion
 let prevStep = 0; //предыдущий ход в motion
-let key = 'mainY';
+let key = 'mainY'; //выбор движения в motion
 let bestIDs; //id лучших порта и товара
 let destinationCoord; //координаты направления
 
@@ -45,7 +44,7 @@ export function getNextCommand(gameState) {
         } else {
             //ДОМОЙ...
             //console.log(motion2(gameState.ship.x, gameState.ship.y));
-            return motion2(gameState.ship.x, gameState.ship.y);
+            return motion(gameState.ship.x, gameState.ship.y);
         }
     } else {
         if (gameState.ship.x == gameState.ports[bestIDs.portsId].x && gameState.ship.y == gameState.ports[bestIDs.portsId].y) {
@@ -58,7 +57,7 @@ export function getNextCommand(gameState) {
         } else {
             //В ПОРТ...
             //console.log(destinationCoord);
-            return motion2(gameState.ship.x, gameState.ship.y);
+            return motion(gameState.ship.x, gameState.ship.y);
         }
     }
 
@@ -71,7 +70,7 @@ export function getNextCommand(gameState) {
     }
 
 
-    function motion2(x, y) {
+    function motion(x, y) {
         switch (key) {
             case 'mainX':
                 return mainX();
@@ -133,24 +132,16 @@ export function getNextCommand(gameState) {
                     key = 'mainX';
                     prevStep = 'w';
                     return 'W';
-                } else if (map[y][x + 1] != EARTH) {
-                    key = 'mainX';
-                    prevStep = 'e';
-                    return 'E';
                 } else {
-                    return altY();
+                    return alt2X();
                 }
             } else if (x < destinationCoord.x) {
                 if (map[y][x + 1] != EARTH && prevStep != 'w') {
                     key = 'mainX';
                     prevStep = 'e';
                     return 'E';
-                } else if (map[y][x - 1] != EARTH) {
-                    key = 'mainX';
-                    prevStep = 'w';
-                    return 'W';
                 } else {
-                    return altY();
+                    return alt2X();
                 } 
             } else {
                 return alt2X()
@@ -163,24 +154,16 @@ export function getNextCommand(gameState) {
                     key = 'mainY';
                     prevStep = 'n';
                     return 'N';
-                } else if (map[y + 1][x] != EARTH){
-                    key = 'mainY';
-                    prevStep = 's';
-                    return 'S';
                 } else {
-                    return altX();
+                    return alt2Y();
                 }
             } else if (y < destinationCoord.y) {
                 if (map[y + 1][x] != EARTH && prevStep != 'n') {
                     key = 'mainY';
                     prevStep = 's';
                     return 'S';
-                } else if (map[y - 1][x] != EARTH){
-                    key = 'mainY';
-                    prevStep = 'n';
-                    return 'N';
                 } else {
-                    return altX();
+                    return alt2Y();
                 }
             } else {
                 return alt2Y();
@@ -205,6 +188,8 @@ export function getNextCommand(gameState) {
                     key = 'alt2X';
                     prevStep = 'w';
                     return 'W';
+                } else {
+                    return altY();
                 }
             } else if (y < destinationCoord.y) {
                 if (map[y + 1][x + 1] != EARTH && map[y][x + 1] != EARTH) {
@@ -223,7 +208,11 @@ export function getNextCommand(gameState) {
                     key = 'alt2X';
                     prevStep = 'w';
                     return 'W';
+                } else {
+                    return altY();
                 }
+            } else {
+                return altY();
             }
         }
         function alt2Y() {
@@ -245,6 +234,8 @@ export function getNextCommand(gameState) {
                     key = 'alt2Y';
                     prevStep = 's';
                     return 'S';
+                } else {
+                    return altX();
                 }
             } else if (x < destinationCoord.x) {
                 if (map[y - 1][x + 1] != EARTH && map[y - 1][x] != EARTH) {
@@ -263,135 +254,12 @@ export function getNextCommand(gameState) {
                     key = 'alt2Y';
                     prevStep = 's';
                     return 'S';
+                } else {
+                    return altX();
                 }
+            } else {
+                return altX();
             }
-        }
-    }
-
-    function motion(x, y) {
-        console.log(prevStep, 'ХОД!!! ограничение:', restrict);
-        if (restrict == 'none') {
-            //if ((prevStep == 'w' || prevStep == 'e') && x != destinationCoord.x) {
-            if (x > destinationCoord.x && map[y][x - 1] == EARTH) {
-                restrict = 'w';
-                console.log('ставлю ограничение', restrict);
-            } else if (x < destinationCoord.x && map[y][x + 1] == EARTH) {
-                restrict = 'e';
-                console.log('ставлю ограничение', restrict);
-            } else if (y > destinationCoord.y && map[y - 1][x] == EARTH) {
-                restrict = 'n';
-                console.log('ставлю ограничение', restrict);
-            } else if (y < destinationCoord.y && map[y + 1][x] == EARTH) {
-                restrict = 's';
-                console.log('ставлю ограничение', restrict);
-            }
-        }
-
-        switch (restrict) {
-            case 'none':
-
-                if (x > destinationCoord.x && prevStep != 'e') {
-                    console.log('налево');
-                    prevStep = 'w';
-                    return 'W';
-                } else if (x < destinationCoord.x && prevStep != 'w') {
-                    console.log('направо');
-                    prevStep = 'e';
-                    return 'E';
-                } else if (y > destinationCoord.y && prevStep != 's') {
-                    console.log('наверх');
-                    prevStep = 'n';
-                    return 'N';
-                } else if (y < destinationCoord.y && prevStep != 'n') {
-                    console.log('вниз');
-                    prevStep = 's';
-                    return 'S';
-                }
-
-            case 'n':
-                console.log('нельзя наверх');
-                if (x > destinationCoord.x && map[y][x - 1] != EARTH && prevStep != 'e') {
-                    restrict = 'none';
-                    console.log('налево');
-                    prevStep = 'w';
-                    return 'W';
-                }
-                else {
-                    if (map[y][x + 1] != EARTH) {
-                        restrict = (map[y][x - 1] == EARTH) ? 'w' : 'none';
-                        console.log('направо');
-                        prevStep = 'e';
-                        return 'E';
-                    }
-                    else {
-                        console.log('вниз');
-                        prevStep = 's';
-                        return 'S'
-                    }
-                }
-            case 's':
-                console.log('нельзя вниз');
-                if (x > destinationCoord.x && map[y][x - 1] != EARTH && prevStep != 'e') {
-                    restrict = 'none';
-                    console.log('налево');
-                    prevStep = 'w';
-                    return 'W';
-                }
-                else {
-                    if (map[y][x + 1] != EARTH) {
-                        restrict = (map[y][x - 1] == EARTH) ? 'w' : 'none';
-                        console.log('направо');
-                        prevStep = 'e';
-                        return 'E';
-                    }
-                    else {
-                        console.log('наверх');
-                        prevStep = 'n';
-                        return 'N'
-                    }
-                }
-            case 'w':
-                console.log('нельзя налево');
-                if (y > destinationCoord.y && map[y - 1][x] != EARTH && prevStep != 's') {
-                    restrict = 'none';
-                    console.log('наверх');
-                    prevStep = 'n';
-                    return 'N';
-                }
-                else {
-                    if (map[y + 1][x] != EARTH) {
-                        restrict = (map[y - 1][x] == EARTH) ? 'n' : 'none';
-                        console.log('вниз');
-                        prevStep = 's';
-                        return 'S';
-                    }
-                    else {
-                        console.log('направо');
-                        prevStep = 'e';
-                        return 'E'
-                    }
-                }
-            case 'e':
-                console.log('нельзя направо');
-                if (y > destinationCoord.y && map[y - 1][x] != EARTH && prevStep != 's') {
-                    restrict = 'none';
-                    console.log('наверх');
-                    prevStep = 'n';
-                    return 'N';
-                }
-                else {
-                    if (map[y + 1][x] != EARTH) {
-                        restrict = (map[y - 1][x] == EARTH) ? 'n' : 'none';
-                        console.log('вниз');
-                        prevStep = 's';
-                        return 'S';
-                    }
-                    else {
-                        console.log('направо');
-                        prevStep = 'e';
-                        return 'E'
-                    }
-                }
         }
     }
 
@@ -442,9 +310,3 @@ export function getNextCommand(gameState) {
     }
 
 }
-
-// switch(Math.max(a, b, c)){
-//     case a: result += "a = " + a; break;
-//     case b: result += "b = " + b; break;
-//     case c: result += "c = " + c; break;
-// }
