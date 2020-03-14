@@ -1,69 +1,99 @@
 const SHIP_VALUE = 368;
 const EARTH = '#';
 let map;
+let distanceToPorts = [];
 let freeValueInShip;
 let stepOfLoad = 'calculate and load'; //шаг погрузки товара
-let prevStep = 0; //предыдущий ход в motion
-let key = 'mainY'; //выбор движения в motion
-let destinationCoord; //координаты направления 
 let bestPortId;
 
 export function startGame(levelMap, gameState) {
-    map = levelMap.split('\n');
-    console.log('start', gameState);
     freeValueInShip = SHIP_VALUE; //свободное место на корабле (здесь для обнуления с новым уровнем)
+
+    map = levelMap.split('\n');
+    let mapMask = [];
+    for (let i = 0; i < map.length; i++) {
+        mapMask[i] = [...map[i]];
+    }
+    map = mapMask;
+    console.log('start', gameState);
+    for (let i = 1; i < gameState.ports.length; i++) {
+        let transformedMap = getTransformedMap(gameState, i);
+        distanceToPorts[i] = transformedMap[gameState.ports[0].y][gameState.ports[0].x];
+        distanceToPorts[i] = (distanceToPorts[i] === 'H') ? -1 : distanceToPorts[i]; //определение недоступного порта
+    }
+}
+
+function getTransformedMap(gameState, id) {
+    let squareOfMap = map.length + map[0].length;
+    let mapForCalc = [];
+    for (let i = 0; i < map.length; i++) {
+        mapForCalc[i] = [...map[i]];
+    }
+    mapForCalc[gameState.ports[id].y][gameState.ports[id].x] = 0;
+
+    for (let w = 0; w < squareOfMap; w++) {
+        for (let i = 0; i < mapForCalc.length; i++) {
+            for (let j = 0; j < mapForCalc[i].length; j++) {
+                if (mapForCalc[i][j] === w) {
+                    if ((j - 1) >= 0 && mapForCalc[i][j - 1] !== '#' && typeof (mapForCalc[i][j - 1]) !== 'number') {
+                        mapForCalc[i][j - 1] = w + 1;
+                    }
+                    if ((i - 1) >= 0 && mapForCalc[i - 1][j] !== '#' && typeof (mapForCalc[i - 1][j]) !== 'number') {
+                        mapForCalc[i - 1][j] = w + 1;
+                    }
+                    if ((j + 1) < mapForCalc[i].length && mapForCalc[i][j + 1] !== '#' && typeof (mapForCalc[i][j + 1]) !== 'number') {
+                        mapForCalc[i][j + 1] = w + 1;
+                    }
+                    if ((i + 1) < mapForCalc.length && mapForCalc[i + 1][j] !== '#' && typeof (mapForCalc[i + 1][j]) !== 'number') {
+                        mapForCalc[i + 1][j] = w + 1;
+                    }
+                }
+            }
+
+        }
+    }
+    return mapForCalc;
 }
 
 export function getNextCommand(gameState) {
     if (gameState.ship.goods.length === 0 || (stepOfLoad === 'load continue' && gameState.goodsInPort.length > 0)) {
         if (gameState.ship.x === gameState.ports[0].x && gameState.ship.y === gameState.ports[0].y) {
-            prevStep = 0;
             //ЗАГРУЗКА
             return mainLoad();
         } else {
             //ДОМОЙ...
-            return motion();
+            return motion(0);
         }
     } else {
         if (gameState.ship.x === gameState.ports[bestPortId + 1].x && gameState.ship.y === gameState.ports[bestPortId + 1].y) {
             //ПРОДАЖА
-            destinationCoord = getHomeCoordinates();
             freeValueInShip = SHIP_VALUE;
-            prevStep = 0;
-            console.log('продаю', gameState.ship.goods[0].name, gameState.ship.goods[0].amount);
             return 'SELL ' + gameState.ship.goods[0].name + ' ' + gameState.ship.goods[0].amount;
         } else {
             //В ПОРТ...
-            return motion();
+            return motion(bestPortId + 1);
         }
     }
 
-    function getPortCoordinates(id) {
-        id++;
-        return { x: gameState.ports[id].x, y: gameState.ports[id].y };
-    }
-
-    function getHomeCoordinates() {
-        return { x: gameState.ports[0].x, y: gameState.ports[0].y };
-    }
-
     function mainLoad() {
-        let matchingGoods = getMatchingGoods();        
+        let matchingGoods = getMatchingGoods();
 
         switch (stepOfLoad) {
             case 'calculate and load':
                 bestPortId = chooseBestPort();
-                destinationCoord = getPortCoordinates(bestPortId);                
+                if (bestPortId < 0) {
+                    return 'WAIT';
+                }
                 return load();
             case 'load continue':
-                return load();                
+                return load();
         }
 
         function load() {
             let goodsIdForLoad = chooseBestGoods(bestPortId, freeValueInShip, matchingGoods);
-            let amountOfGoods = countAmount(goodsIdForLoad, freeValueInShip);
+            let amountOfGoods = countAmount(bestPortId, goodsIdForLoad, freeValueInShip);
             freeValueInShip = freeValueInShip - amountOfGoods * gameState.goodsInPort[goodsIdForLoad].volume;
-            console.log('Загружаю', gameState.goodsInPort[goodsIdForLoad].name, amountOfGoods)
+            console.log('Загружаю', gameState.goodsInPort[goodsIdForLoad].name, amountOfGoods, 'в порт:', bestPortId + 1)
             return 'LOAD ' + gameState.goodsInPort[goodsIdForLoad].name + ' ' + amountOfGoods;
         }
 
@@ -90,10 +120,10 @@ export function getNextCommand(gameState) {
                 for (let j = 0; j < matchingGoodsForCalculate[i].length; j++) {
                     let goodsId = chooseBestGoods(i, freeValue, matchingGoodsForCalculate);
                     if (goodsId >= 0) {
-                        let amount = countAmount(goodsId, freeValue)
+                        let amount = countAmount(i, goodsId, freeValue)
                         let countVol = amount * gameState.goodsInPort[goodsId].volume;
                         let cost = gameState.prices[i][gameState.goodsInPort[goodsId].name];
-                        profit = profit + amount * cost;
+                        profit = profit + (amount * cost) / (2 * distanceToPorts[i + 1]);
                         if (profit > maxProfit) {
                             portId = i;
                             maxProfit = profit;
@@ -106,7 +136,7 @@ export function getNextCommand(gameState) {
                     }
                 }
             }
-            return portId;
+            return portId; //на 1 меньше чем реальный id порта
         }
 
         function chooseBestGoods(portId, freeValue, matchingGoods) {
@@ -124,14 +154,14 @@ export function getNextCommand(gameState) {
             return goodsId; //id товара из списка совпадений в данном порту portId
         }
 
-        function countAmount(goodsId, freeValue) {
+        function countAmount(portId, goodsId, freeValue) {
             let maxAmount = Math.floor(freeValue / gameState.goodsInPort[goodsId].volume);
             if (maxAmount <= gameState.goodsInPort[goodsId].amount) {
                 stepOfLoad = 'calculate and load';
                 return maxAmount;
             }
             else {
-                if (matchingGoods[goodsId].length === 1) {
+                if (matchingGoods[portId].length === 1) {
                     stepOfLoad = 'calculate and load';
                 } else {
                     stepOfLoad = 'load continue';
@@ -141,9 +171,11 @@ export function getNextCommand(gameState) {
         }
     }
 
-    function motion() {
+    function motion(id) {
         let x = gameState.ship.x;
         let y = gameState.ship.y;
+        let transformedMap = getTransformedMap(gameState, id);
+
         let checkPiratesBeside = {
             n: function () {
                 for (let i = 0; i < gameState.pirates.length; i++) {
@@ -261,14 +293,10 @@ export function getNextCommand(gameState) {
             switch (direction()) {
                 case 'N':
                 case 'S':
-                    if (x >= destinationCoord.x) {
+                    if (x >= gameState.ports[id].x) {
                         if (map[y][x - 1] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 0;
                             return 'W';
                         } else if (map[y][x + 1] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 0;
                             return 'E';
                         } else if (direction() === 'N') {
                             return 'S';
@@ -277,12 +305,8 @@ export function getNextCommand(gameState) {
                         }
                     } else {
                         if (map[y][x + 1] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 0;
                             return 'E';
                         } else if (map[y][x - 1] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 0;
                             return 'W';
                         } else if (direction() === 'N') {
                             return 'S';
@@ -292,14 +316,10 @@ export function getNextCommand(gameState) {
                     }
                 case 'W':
                 case 'E':
-                    if (y >= destinationCoord.y) {
+                    if (y >= gameState.ports[id].y) {
                         if (map[y - 1][x] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 0;
                             return 'N';
                         } else if (map[y + 1][x] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 0;
                             return 'S';
                         } else if (direction() === 'W') {
                             return 'E';
@@ -308,12 +328,8 @@ export function getNextCommand(gameState) {
                         }
                     } else {
                         if (map[y + 1][x] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 0;
                             return 'S';
                         } else if (map[y - 1][x] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 0;
                             return 'N';
                         } else if (direction() === 'W') {
                             return 'E';
@@ -325,225 +341,16 @@ export function getNextCommand(gameState) {
         }
 
         function direction() {
-            switch (key) {
-                case 'mainX':
-                    return mainX();
-                case 'mainY':
-                    return mainY();
-                case 'alt2X':
-                    return alt2X();
-                case 'alt2Y':
-                    return alt2Y();
-            }
-        }
+            let myPosition = transformedMap[y][x];
 
-        function mainX() {
-            console.log('mainX');
-            if (x > destinationCoord.x) {
-                if (map[y][x - 1] != EARTH && prevStep != 'e') {
-                    key = 'mainX';
-                    prevStep = 'w';
-                    return 'W';
-                } else {
-                    return altY();
-                }
-            } else if (x < destinationCoord.x) {
-                if (map[y][x + 1] != EARTH && prevStep != 'w') {
-                    key = 'mainX';
-                    prevStep = 'e';
-                    return 'E';
-                } else {
-                    return altY();
-                }
+            if ((x - 1) >= 0 && transformedMap[y][x - 1] < myPosition){
+                return 'W';
+            } else if ((y - 1) >= 0 && transformedMap[y - 1][x] < myPosition) {
+                return 'N';
+            } else if ((x + 1) < transformedMap.length && transformedMap[y][x + 1] < myPosition) {
+                return 'E';
             } else {
-                return mainY()
-            }
-        }
-
-        function mainY() {
-            console.log('mainY');
-            if (y > destinationCoord.y) {
-                if (map[y - 1][x] != EARTH && prevStep != 's') {
-                    key = 'mainY';
-                    prevStep = 'n';
-                    return 'N';
-                } else {
-                    return altX();
-                }
-            } else if (y < destinationCoord.y) {
-                if (map[y + 1][x] != EARTH && prevStep != 'n') {
-                    key = 'mainY';
-                    prevStep = 's';
-                    return 'S';
-                } else {
-                    return altX();
-                }
-            } else {
-                return mainX();
-            }
-        }
-
-        function altX() {
-            console.log('altX');
-            if (x > destinationCoord.x) {
-                if (map[y][x - 1] != EARTH && prevStep != 'e') {
-                    key = 'mainX';
-                    prevStep = 'w';
-                    return 'W';
-                } else {
-                    return alt2X();
-                }
-            } else if (x < destinationCoord.x) {
-                if (map[y][x + 1] != EARTH && prevStep != 'w') {
-                    key = 'mainX';
-                    prevStep = 'e';
-                    return 'E';
-                } else {
-                    return alt2X();
-                }
-            } else {
-                return alt2X()
-            }
-        }
-
-        function altY() {
-            console.log('altY');
-            if (y > destinationCoord.y) {
-                if (map[y - 1][x] != EARTH && prevStep != 's') {
-                    key = 'mainY';
-                    prevStep = 'n';
-                    return 'N';
-                } else {
-                    return alt2Y();
-                }
-            } else if (y < destinationCoord.y) {
-                if (map[y + 1][x] != EARTH && prevStep != 'n') {
-                    key = 'mainY';
-                    prevStep = 's';
-                    return 'S';
-                } else {
-                    return alt2Y();
-                }
-            } else {
-                return alt2Y();
-            }
-        }
-
-        function alt2X() {
-            console.log('alt2X');
-            if (y > destinationCoord.y) {
-                for (let i = 1; i < map[0].length; i++) {
-                    if ((x + i) < map[0].length) {
-                        if (map[y - 1][x + 1] != EARTH && map[y][x + 1] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 'e';
-                            return 'E';
-                        } else if (map[y - 1][x + i] != EARTH && map[y][x + 1] != EARTH && !(key === 'alt2X' && prevStep === 'w')) {
-                            key = 'alt2X';
-                            prevStep = 'e';
-                            return 'E';
-                        }
-                    }
-                    if ((x - i) >= 0) {
-                        if (map[y - 1][x - 1] != EARTH && map[y][x - 1] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 'w';
-                            return 'W';
-                        } else if (map[y - 1][x - i] != EARTH && map[y][x - 1] != EARTH && !(key === 'alt2X' && prevStep === 'e')) {
-                            key = 'alt2X';
-                            prevStep = 'w';
-                            return 'W';
-                        }
-                    }
-                }
-                return altY();
-            } else if (y < destinationCoord.y) {
-                for (let i = 1; i < map[0].length; i++) {
-                    if ((x + i) < map[0].length) {
-                        if (map[y + 1][x + 1] != EARTH && map[y][x + 1] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 'e';
-                            return 'E';
-                        } else if (map[y + 1][x + i] != EARTH && map[y][x + 1] != EARTH && !(key === 'alt2X' && prevStep === 'w')) {
-                            key = 'alt2X';
-                            prevStep = 'e';
-                            return 'E';
-                        }
-                    }
-                    if ((x - i) >= 0) {
-                        if (map[y + 1][x - 1] != EARTH && map[y][x - 1] != EARTH) {
-                            key = 'mainX';
-                            prevStep = 'w';
-                            return 'W';
-                        } else if (map[y + 1][x - i] != EARTH && map[y][x - 1] != EARTH && !(key === 'alt2X' && prevStep === 'e')) {
-                            key = 'alt2X';
-                            prevStep = 'w';
-                            return 'W';
-                        }
-                    }
-                }
-                return altY();
-            } else {
-                return altY();
-            }
-        }
-
-        function alt2Y() {
-            console.log('alt2Y');
-            if (x > destinationCoord.x) {
-                for (let i = 1; i < map.length; i++) {
-                    if ((y + i) < map.length) {
-                        if (map[y + 1][x - 1] != EARTH && map[y + 1][x] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 's';
-                            return 'S';
-                        } else if (map[y + i][x - 1] != EARTH && map[y + 1][x] != EARTH && !(key === 'alt2Y' && prevStep === 'n')) {
-                            key = 'alt2Y';
-                            prevStep = 's';
-                            return 'S';
-                        }
-                    }
-                    if ((y - i) >= 0) {
-                        if (map[y - 1][x - 1] != EARTH && map[y - 1][x] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 'n';
-                            return 'N';
-                        } else if (map[y - i][x - 1] != EARTH && map[y - 1][x] != EARTH && !(key === 'alt2Y' && prevStep === 's')) {
-                            key = 'alt2Y';
-                            prevStep = 'n';
-                            return 'N';
-                        }
-                    }
-                }
-                return altX();
-            } else if (x < destinationCoord.x) {
-                for (let i = 1; i < map.length; i++) {
-                    if ((y + i) < map.length) {
-                        if (map[y + 1][x + 1] != EARTH && map[y + 1][x] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 's';
-                            return 'S';
-                        } else if (map[y + i][x + 1] != EARTH && map[y + 1][x] != EARTH && !(key === 'alt2Y' && prevStep === 'n')) {
-                            key = 'alt2Y';
-                            prevStep = 's';
-                            return 'S';
-                        }
-                    }
-                    if ((y - i) >= 0) {
-                        if (map[y - 1][x + 1] != EARTH && map[y - 1][x] != EARTH) {
-                            key = 'mainY';
-                            prevStep = 'n';
-                            return 'N';
-                        } else if (map[y - i][x + 1] != EARTH && map[y - 1][x] != EARTH && !(key === 'alt2Y' && prevStep === 's')) {
-                            key = 'alt2Y';
-                            prevStep = 'n';
-                            return 'N';
-                        }
-                    }
-                }
-                return altX();
-            } else {
-                return altX();
+                return 'S';
             }
         }
     }
