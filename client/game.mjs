@@ -8,7 +8,8 @@ let bestPortId;
 
 export function startGame(levelMap, gameState) {
     freeValueInShip = SHIP_VALUE; //свободное место на корабле (здесь для обнуления с новым уровнем)
-
+    sortById(gameState.ports);   
+    
     map = levelMap.split('\n');
     let mapMask = [];
     for (let i = 0; i < map.length; i++) {
@@ -19,8 +20,16 @@ export function startGame(levelMap, gameState) {
     for (let i = 1; i < gameState.ports.length; i++) {
         let transformedMap = getTransformedMap(gameState, i);
         distanceToPorts[i] = transformedMap[gameState.ports[0].y][gameState.ports[0].x];
-        distanceToPorts[i] = (distanceToPorts[i] === 'H') ? -1 : distanceToPorts[i]; //определение недоступного порта
+        distanceToPorts[i] = (distanceToPorts[i] === 'H') ? -10 : distanceToPorts[i]; //определение недоступного порта
     }
+
+    for (let i = 0; i < gameState.ports.length; i++) {
+        
+    }
+}
+
+function sortById(arr) {
+    arr.sort((a, b) => a.portId > b.portId ? 1 : -1);
 }
 
 function getTransformedMap(gameState, id) {
@@ -56,6 +65,8 @@ function getTransformedMap(gameState, id) {
 }
 
 export function getNextCommand(gameState) {
+    sortById(gameState.ports);
+    
     if (gameState.ship.goods.length === 0 || (stepOfLoad === 'load continue' && gameState.goodsInPort.length > 0)) {
         if (gameState.ship.x === gameState.ports[0].x && gameState.ship.y === gameState.ports[0].y) {
             //ЗАГРУЗКА
@@ -71,13 +82,14 @@ export function getNextCommand(gameState) {
             return 'SELL ' + gameState.ship.goods[0].name + ' ' + gameState.ship.goods[0].amount;
         } else {
             //В ПОРТ...
+            stepOfLoad = 'calculate and load';
             return motion(bestPortId + 1);
         }
     }
 
     function mainLoad() {
         let matchingGoods = getMatchingGoods();
-
+        console.log('matchingGoods', matchingGoods)
         switch (stepOfLoad) {
             case 'calculate and load':
                 bestPortId = chooseBestPort();
@@ -93,7 +105,7 @@ export function getNextCommand(gameState) {
             let goodsIdForLoad = chooseBestGoods(bestPortId, freeValueInShip, matchingGoods);
             let amountOfGoods = countAmount(bestPortId, goodsIdForLoad, freeValueInShip);
             freeValueInShip = freeValueInShip - amountOfGoods * gameState.goodsInPort[goodsIdForLoad].volume;
-            console.log('Загружаю', gameState.goodsInPort[goodsIdForLoad].name, amountOfGoods, 'в порт:', bestPortId + 1)
+            console.log('Загружаю', gameState.goodsInPort[goodsIdForLoad].name, amountOfGoods, 'в порт:', bestPortId + 1);
             return 'LOAD ' + gameState.goodsInPort[goodsIdForLoad].name + ' ' + amountOfGoods;
         }
 
@@ -123,7 +135,7 @@ export function getNextCommand(gameState) {
                         let amount = countAmount(i, goodsId, freeValue)
                         let countVol = amount * gameState.goodsInPort[goodsId].volume;
                         let cost = gameState.prices[i][gameState.goodsInPort[goodsId].name];
-                        profit = profit + (amount * cost) / (2 * distanceToPorts[i + 1]);
+                        profit = profit + (amount * cost) / (2 * (1 + distanceToPorts[i + 1]));
                         if (profit > maxProfit) {
                             portId = i;
                             maxProfit = profit;
@@ -136,7 +148,7 @@ export function getNextCommand(gameState) {
                     }
                 }
             }
-            return portId; //на 1 меньше чем реальный id порта
+            return portId; //на 1 меньше чем id порта в ports
         }
 
         function chooseBestGoods(portId, freeValue, matchingGoods) {
@@ -294,9 +306,9 @@ export function getNextCommand(gameState) {
                 case 'N':
                 case 'S':
                     if (x >= gameState.ports[id].x) {
-                        if (map[y][x - 1] != EARTH) {
+                        if ((x - 1) >= 0 && map[y][x - 1] != EARTH && !checkPiratesBeside.w() && !checkPiratesNearby.w()) {
                             return 'W';
-                        } else if (map[y][x + 1] != EARTH) {
+                        } else if ((x + 1) < transformedMap[0].length && map[y][x + 1] != EARTH && !checkPiratesBeside.e() && !checkPiratesNearby.e()) {
                             return 'E';
                         } else if (direction() === 'N') {
                             return 'S';
@@ -304,9 +316,9 @@ export function getNextCommand(gameState) {
                             return 'N';
                         }
                     } else {
-                        if (map[y][x + 1] != EARTH) {
+                        if ((x + 1) < transformedMap[0].length && map[y][x + 1] != EARTH && !checkPiratesBeside.e() && !checkPiratesNearby.e()) {
                             return 'E';
-                        } else if (map[y][x - 1] != EARTH) {
+                        } else if ((x - 1) >= 0 && map[y][x - 1] != EARTH && !checkPiratesBeside.w() && !checkPiratesNearby.w()) {
                             return 'W';
                         } else if (direction() === 'N') {
                             return 'S';
@@ -317,9 +329,9 @@ export function getNextCommand(gameState) {
                 case 'W':
                 case 'E':
                     if (y >= gameState.ports[id].y) {
-                        if (map[y - 1][x] != EARTH) {
+                        if ((y - 1) >= 0 && map[y - 1][x] != EARTH && !checkPiratesBeside.n() && !checkPiratesNearby.n()) {
                             return 'N';
-                        } else if (map[y + 1][x] != EARTH) {
+                        } else if ((y + 1) < transformedMap.length && map[y + 1][x] != EARTH && !checkPiratesBeside.s() && !checkPiratesNearby.s()) {
                             return 'S';
                         } else if (direction() === 'W') {
                             return 'E';
@@ -327,9 +339,9 @@ export function getNextCommand(gameState) {
                             return 'W';
                         }
                     } else {
-                        if (map[y + 1][x] != EARTH) {
+                        if ((y + 1) < transformedMap.length && map[y + 1][x] != EARTH && !checkPiratesBeside.s() && !checkPiratesNearby.s()) {
                             return 'S';
-                        } else if (map[y - 1][x] != EARTH) {
+                        } else if ((y - 1) >= 0 && map[y - 1][x] != EARTH && !checkPiratesBeside.n() && !checkPiratesNearby.n()) {
                             return 'N';
                         } else if (direction() === 'W') {
                             return 'E';
@@ -343,13 +355,13 @@ export function getNextCommand(gameState) {
         function direction() {
             let myPosition = transformedMap[y][x];
 
-            if ((x - 1) >= 0 && transformedMap[y][x - 1] < myPosition){
+            if ((x - 1) >= 0 && transformedMap[y][x - 1] < myPosition) {
                 return 'W';
             } else if ((y - 1) >= 0 && transformedMap[y - 1][x] < myPosition) {
                 return 'N';
-            } else if ((x + 1) < transformedMap.length && transformedMap[y][x + 1] < myPosition) {
+            } else if ((x + 1) < transformedMap[0].length && transformedMap[y][x + 1] < myPosition) {
                 return 'E';
-            } else {
+            } else if ((y + 1) < transformedMap.length && transformedMap[y + 1][x] < myPosition) {
                 return 'S';
             }
         }
