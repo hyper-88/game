@@ -1,30 +1,39 @@
 const SHIP_VALUE = 368;
 const EARTH = '#';
 let map;
-let distanceToPorts = [];
+let distanceToPorts;
 let freeValueInShip;
-let stepOfLoad = 'calculate and load'; //шаг погрузки товара
-let bestPortId;
+let stepOfLoad; //шаг погрузки товара
+let bestPortId; //индекс(!) лучшего товара
+let homePortIndex;
 
 export function startGame(levelMap, gameState) {
+    distanceToPorts = [];
+    stepOfLoad = 'calculate and load';
     freeValueInShip = SHIP_VALUE; //свободное место на корабле (здесь для обнуления с новым уровнем)
-    sortById(gameState.ports);   
-    
+    sortById(gameState.ports);
+
+    for (let i = 0; i < gameState.ports.length; i++) {
+        if (gameState.ports[i].isHome === true) {
+            homePortIndex = i;
+        }
+    }
+
     map = levelMap.split('\n');
     let mapMask = [];
     for (let i = 0; i < map.length; i++) {
         mapMask[i] = [...map[i]];
     }
     map = mapMask;
-    console.log('start', gameState);
-    for (let i = 1; i < gameState.ports.length; i++) {
-        let transformedMap = getTransformedMap(gameState, i);
-        distanceToPorts[i] = transformedMap[gameState.ports[0].y][gameState.ports[0].x];
-        distanceToPorts[i] = (distanceToPorts[i] === 'H') ? -10 : distanceToPorts[i]; //определение недоступного порта
-    }
 
     for (let i = 0; i < gameState.ports.length; i++) {
-        
+        if (i === homePortIndex) {
+            continue;
+        }
+        let transformedMap = getTransformedMap(gameState, i);
+        let distance = transformedMap[gameState.ports[homePortIndex].y][gameState.ports[homePortIndex].x];
+        distance = (distance === 'H') ? -10 : distance; //определение недоступного порта
+        distanceToPorts.push(distance);
     }
 }
 
@@ -66,30 +75,29 @@ function getTransformedMap(gameState, id) {
 
 export function getNextCommand(gameState) {
     sortById(gameState.ports);
-    
     if (gameState.ship.goods.length === 0 || (stepOfLoad === 'load continue' && gameState.goodsInPort.length > 0)) {
-        if (gameState.ship.x === gameState.ports[0].x && gameState.ship.y === gameState.ports[0].y) {
+        if (gameState.ship.x === gameState.ports[homePortIndex].x && gameState.ship.y === gameState.ports[homePortIndex].y) {
             //ЗАГРУЗКА
             return mainLoad();
         } else {
             //ДОМОЙ...
-            return motion(0);
+            return motion(homePortIndex);
         }
     } else {
-        if (gameState.ship.x === gameState.ports[bestPortId + 1].x && gameState.ship.y === gameState.ports[bestPortId + 1].y) {
+        let bestPortIndex = (bestPortId >= homePortIndex) ? (bestPortId + 1) : bestPortId;
+        if (gameState.ship.x === gameState.ports[bestPortIndex].x && gameState.ship.y === gameState.ports[bestPortIndex].y) {
             //ПРОДАЖА
             freeValueInShip = SHIP_VALUE;
             return 'SELL ' + gameState.ship.goods[0].name + ' ' + gameState.ship.goods[0].amount;
         } else {
             //В ПОРТ...
             stepOfLoad = 'calculate and load';
-            return motion(bestPortId + 1);
+            return motion(bestPortIndex);
         }
     }
 
     function mainLoad() {
         let matchingGoods = getMatchingGoods();
-        console.log('matchingGoods', matchingGoods)
         switch (stepOfLoad) {
             case 'calculate and load':
                 bestPortId = chooseBestPort();
@@ -105,7 +113,6 @@ export function getNextCommand(gameState) {
             let goodsIdForLoad = chooseBestGoods(bestPortId, freeValueInShip, matchingGoods);
             let amountOfGoods = countAmount(bestPortId, goodsIdForLoad, freeValueInShip);
             freeValueInShip = freeValueInShip - amountOfGoods * gameState.goodsInPort[goodsIdForLoad].volume;
-            console.log('Загружаю', gameState.goodsInPort[goodsIdForLoad].name, amountOfGoods, 'в порт:', bestPortId + 1);
             return 'LOAD ' + gameState.goodsInPort[goodsIdForLoad].name + ' ' + amountOfGoods;
         }
 
@@ -123,7 +130,7 @@ export function getNextCommand(gameState) {
         }
 
         function chooseBestPort() {
-            let portId = -1;
+            let portIndex = -1;
             let maxProfit = 0;
             for (let i = 0; i < matchingGoods.length; i++) {
                 let freeValue = SHIP_VALUE;
@@ -135,9 +142,9 @@ export function getNextCommand(gameState) {
                         let amount = countAmount(i, goodsId, freeValue)
                         let countVol = amount * gameState.goodsInPort[goodsId].volume;
                         let cost = gameState.prices[i][gameState.goodsInPort[goodsId].name];
-                        profit = profit + (amount * cost) / (2 * (1 + distanceToPorts[i + 1]));
+                        profit = profit + (amount * cost) / (2 * (1 + distanceToPorts[i]));
                         if (profit > maxProfit) {
-                            portId = i;
+                            portIndex = i;
                             maxProfit = profit;
                         }
                         freeValue = freeValue - countVol;
@@ -148,22 +155,22 @@ export function getNextCommand(gameState) {
                     }
                 }
             }
-            return portId; //на 1 меньше чем id порта в ports
+            return portIndex; //индекс лучшего порта
         }
 
-        function chooseBestGoods(portId, freeValue, matchingGoods) {
+        function chooseBestGoods(portIndex, freeValue, matchingGoods) {
             let goodsId = -1;
             let first = 0;
-            for (let j = 0; j < matchingGoods[portId].length; j++) {
-                let vol = gameState.goodsInPort[matchingGoods[portId][j]].volume;
-                let cost = gameState.prices[portId][gameState.goodsInPort[matchingGoods[portId][j]].name];
+            for (let j = 0; j < matchingGoods[portIndex].length; j++) {
+                let vol = gameState.goodsInPort[matchingGoods[portIndex][j]].volume;
+                let cost = gameState.prices[portIndex][gameState.goodsInPort[matchingGoods[portIndex][j]].name];
                 let num = Math.floor(freeValue / vol) * cost;
                 if (num > first) {
                     first = num;
-                    goodsId = matchingGoods[portId][j];
+                    goodsId = matchingGoods[portIndex][j];
                 }
             }
-            return goodsId; //id товара из списка совпадений в данном порту portId
+            return goodsId; //индекс товара из списка совпадений в данном порту
         }
 
         function countAmount(portId, goodsId, freeValue) {
